@@ -22,6 +22,8 @@ def get_fc(inp_dim, out_dim, non_linear='relu'):
         layers.append(nn.ReLU())
     elif non_linear == 'softmax':
         layers.append(nn.Softmax(dim=1))
+    elif non_linear == 'sigmoid':
+        layers.append(nn.Sigmoid())
     elif non_linear == 'none':
         pass
     else:
@@ -39,16 +41,21 @@ class SimpleCNN(nn.Module):
         self.conv1 = nn.Conv2d(c_dim, 32, 5, padding=2)
         self.conv2 = nn.Conv2d(32, 64, 5, padding=2)
         # TODO Q0.3: Modify the code here
-        self.nonlinear = lambda x: x
+        self.nonlinear = lambda x: F.relu(x)
         self.pool1 = nn.AvgPool2d(2, 2)
         self.pool2 = nn.AvgPool2d(2, 2)
 
         # TODO Q0.1: Modify the code here. It must be a function of inp_size.
-        self.flat_dim = 1
+        # Before conv1, 1xinp_size^2
+        # After conv1, 32xinp_size^2
+        # After pool1, 32xinp_size^2/4
+        # After conv2, 64xinp_size^2/4
+        # After pool2, 64xinp_size^2/16
+        self.flat_dim = int(64 * inp_size * inp_size // 16)
         # TODO Q0.3: Modify the code here
         # Sequential is another way of chaining the layers.
-        self.fc1 = nn.Sequential(*get_fc(self.flat_dim, 128, 'none'))
-        self.fc2 = nn.Sequential(*get_fc(128, num_classes, 'none'))
+        self.fc1 = nn.Sequential(*get_fc(self.flat_dim, 128, 'relu'))
+        self.fc2 = nn.Sequential(*get_fc(128, num_classes, 'sigmoid'))
 
     def forward(self, x):
         """

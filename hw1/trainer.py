@@ -47,7 +47,7 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
             output = model(data)
             # Calculate the loss
             # TODO Q1.4: your loss for multi-label classification
-            loss = 0
+            loss = torch.nn.functional.binary_cross_entropy(output, target, wgt)
             # Calculate gradient w.r.t the loss
             loss.backward()
             # Optimizer takes one step

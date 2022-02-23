@@ -13,6 +13,7 @@ import torch
 import torch.nn
 from PIL import Image
 from torch.utils.data import Dataset
+from torchvision import transforms
 
 
 class VOCDataset(Dataset):
@@ -24,13 +25,27 @@ class VOCDataset(Dataset):
         INV_CLASS[CLASS_NAMES[i]] = i
 
     # TODO Q1.2: Adjust data_dir according to where **you** stored the data
-    def __init__(self, split, size, data_dir='VOCdevkit/VOC2007/'):
+    def __init__(self, split, size, data_dir='data/VOCdevkit/VOC2007/'):
         super().__init__()
         self.split = split
         self.data_dir = data_dir
         self.size = size
         self.img_dir = os.path.join(data_dir, 'JPEGImages')
         self.ann_dir = os.path.join(data_dir, 'Annotations')
+
+        if split == "train":
+            self.tf_composition = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.RandomResizedCrop(self.size, scale=(0.5, 1.0)),
+                transforms.RandomHorizontalFlip(),
+                transforms.GaussianBlur(3),
+            ])
+        else:
+            self.tf_composition = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.RandomResizedCrop(self.size, scale=(1.0, 1.0)),
+                transforms.GaussianBlur(3, 2.0),
+            ])
 
         split_file = os.path.join(data_dir, 'ImageSets/Main', split + '.txt')
         with open(split_file) as fp:
@@ -59,6 +74,19 @@ class VOCDataset(Dataset):
             fpath = os.path.join(self.ann_dir, index + '.xml')
             tree = ET.parse(fpath)
             # TODO Q1.2: insert your code here, preload labels
+            class_array = np.zeros((20,))
+            weight_arrays = []
+            root = tree.getroot()
+            for i, child in enumerate(root):
+                if not child.tag == "object":
+                    continue
+                class_index = self.get_class_index(child[0].text)
+                class_array[class_index] = 1
+                if int(child[3].text) != 1:
+                    weight_array = np.ones((20,))
+                    weight_array[class_index] = 0
+                    weight_arrays.append(weight_array)
+            label_list.append([class_array, np.logical_or.reduce(weight_arrays)])
 
         return label_list
 
@@ -73,8 +101,11 @@ class VOCDataset(Dataset):
         findex = self.index_list[index]
         fpath = os.path.join(self.img_dir, findex + '.jpg')
         # TODO Q1.2: insert your code here. hint: read image, find the labels and weight.
+        lab_vec = self.anno_list[index][0]
+        wgt_vec = self.anno_list[index][1]
+        img = Image.open(fpath)
 
-        image = torch.FloatTensor(img)
+        image = self.tf_composition(img)
         label = torch.FloatTensor(lab_vec)
         wgt = torch.FloatTensor(wgt_vec)
         return image, label, wgt
