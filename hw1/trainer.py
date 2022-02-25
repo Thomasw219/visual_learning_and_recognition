@@ -7,6 +7,8 @@ from __future__ import print_function
 import torch
 import numpy as np
 
+from torch.utils.tensorboard import SummaryWriter
+
 import utils
 from voc_dataset import VOCDataset
 
@@ -28,6 +30,7 @@ def save_model(epoch, model_name, model):
 
 def train(args, model, optimizer, scheduler=None, model_name='model'):
     # TODO Q1.5: Initialize your tensorboard writer here!
+    writer = SummaryWriter()
     train_loader = utils.get_data_loader(
         'voc', train=True, batch_size=args.batch_size, split='trainval', inp_size=args.inp_size)
     test_loader = utils.get_data_loader(
@@ -47,7 +50,7 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
             output = model(data)
             # Calculate the loss
             # TODO Q1.4: your loss for multi-label classification
-            loss = torch.nn.functional.binary_cross_entropy(output, target, wgt)
+            loss = torch.nn.functional.binary_cross_entropy(output, target, weight=wgt)
             # Calculate gradient w.r.t the loss
             loss.backward()
             # Optimizer takes one step
@@ -55,6 +58,10 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
             # Log info
             if cnt % args.log_every == 0:
                 # TODO Q1.5: Log training loss to tensorboard
+#                print(target[:5])
+#                print(wgt[:5])
+#                print(output[:5])
+                writer.add_scalar("Loss/train", loss.item(), epoch * len(train_loader) + batch_idx)
                 print('Train Epoch: {} [{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, cnt, 100. * batch_idx / len(train_loader), loss.item()))
                 # TODO Q3.2: Log histogram of gradients
@@ -63,6 +70,9 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
                 model.eval()
                 ap, map = utils.eval_dataset_map(model, args.device, test_loader)
                 # TODO Q1.5: Log MAP to tensorboard
+#                print(ap)
+                print(map)
+                writer.add_scalar("MAP/test", map.item(), epoch * len(train_loader) + batch_idx)
                 model.train()
             cnt += 1
 
@@ -77,4 +87,5 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
     # Validation iteration
     test_loader = utils.get_data_loader('voc', train=False, batch_size=args.test_batch_size, split='test', inp_size=args.inp_size)
     ap, map = utils.eval_dataset_map(model, args.device, test_loader)
+    writer.close()
     return ap, map

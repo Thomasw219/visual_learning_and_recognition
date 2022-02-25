@@ -36,15 +36,13 @@ class VOCDataset(Dataset):
         if split == "train":
             self.tf_composition = transforms.Compose([
                 transforms.ToTensor(),
-                transforms.RandomResizedCrop(self.size, scale=(0.5, 1.0)),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
                 transforms.RandomHorizontalFlip(),
-                transforms.GaussianBlur(3),
             ])
         else:
             self.tf_composition = transforms.Compose([
                 transforms.ToTensor(),
-                transforms.RandomResizedCrop(self.size, scale=(1.0, 1.0)),
-                transforms.GaussianBlur(3, 2.0),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ])
 
         split_file = os.path.join(data_dir, 'ImageSets/Main', split + '.txt')
@@ -75,18 +73,22 @@ class VOCDataset(Dataset):
             tree = ET.parse(fpath)
             # TODO Q1.2: insert your code here, preload labels
             class_array = np.zeros((20,))
-            weight_arrays = []
+            difficult = np.zeros((20,))
+            easy = np.zeros((20,))
             root = tree.getroot()
             for i, child in enumerate(root):
                 if not child.tag == "object":
                     continue
                 class_index = self.get_class_index(child[0].text)
                 class_array[class_index] = 1
-                if int(child[3].text) != 1:
-                    weight_array = np.ones((20,))
-                    weight_array[class_index] = 0
-                    weight_arrays.append(weight_array)
-            label_list.append([class_array, np.logical_or.reduce(weight_arrays)])
+                if int(child[3].text) == 1:
+                    difficult[class_index] = 1
+                else:
+                    easy[class_index] = 1
+            weight_array = np.ones((20,))
+            difficult = np.logical_and(difficult, np.logical_not(easy))
+            weight_array -= difficult
+            label_list.append([class_array, weight_array])
 
         return label_list
 
@@ -103,7 +105,14 @@ class VOCDataset(Dataset):
         # TODO Q1.2: insert your code here. hint: read image, find the labels and weight.
         lab_vec = self.anno_list[index][0]
         wgt_vec = self.anno_list[index][1]
-        img = Image.open(fpath)
+        img = Image.open(fpath).resize((self.size, self.size))
+
+#        img = img * 2 / 255 - 1
+
+#        img -= np.array([123.68, 116.78, 103.94]) # subtract mean
+#        img = img * 2 / 255
+
+#        img = torch.tensor(img).permute((2, 0, 1))
 
         image = self.tf_composition(img)
         label = torch.FloatTensor(lab_vec)
