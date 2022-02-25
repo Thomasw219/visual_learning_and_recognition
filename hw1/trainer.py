@@ -25,8 +25,7 @@ def save_model(epoch, model_name, model):
     # TODO: Q2.2 Implement code for model saving
     filename = 'checkpoint-{}-epoch{}.pth'.format(
         model_name, epoch+1)
-    pass
-
+    torch.save(model.state_dict(), "models/" + filename)
 
 def train(args, model, optimizer, scheduler=None, model_name='model'):
     # TODO Q1.5: Initialize your tensorboard writer here!
@@ -58,9 +57,6 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
             # Log info
             if cnt % args.log_every == 0:
                 # TODO Q1.5: Log training loss to tensorboard
-#                print(target[:5])
-#                print(wgt[:5])
-#                print(output[:5])
                 writer.add_scalar("Loss/train", loss.item(), epoch * len(train_loader) + batch_idx)
                 print('Train Epoch: {} [{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, cnt, 100. * batch_idx / len(train_loader), loss.item()))
@@ -70,7 +66,6 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
                 model.eval()
                 ap, map = utils.eval_dataset_map(model, args.device, test_loader)
                 # TODO Q1.5: Log MAP to tensorboard
-#                print(ap)
                 print(map)
                 writer.add_scalar("MAP/test", map.item(), epoch * len(train_loader) + batch_idx)
                 model.train()
