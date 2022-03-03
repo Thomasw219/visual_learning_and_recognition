@@ -61,6 +61,8 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
                 print('Train Epoch: {} [{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, cnt, 100. * batch_idx / len(train_loader), loss.item()))
                 # TODO Q3.2: Log histogram of gradients
+                for name, parameter in model.named_parameters():
+                    writer.add_histogram(name, torch.abs(parameter.grad).flatten(), epoch * len(train_loader) + batch_idx)
             # Validation iteration
             if cnt % args.val_every == 0:
                 model.eval()
@@ -73,6 +75,7 @@ def train(args, model, optimizer, scheduler=None, model_name='model'):
 
         # TODO Q3.2: Log Learning rate
         if scheduler is not None:
+            writer.add_scalar("LR/train", scheduler.get_last_lr()[0], epoch * len(train_loader) + batch_idx)
             scheduler.step()
 
         # save model

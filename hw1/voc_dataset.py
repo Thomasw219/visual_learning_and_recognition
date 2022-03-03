@@ -33,14 +33,19 @@ class VOCDataset(Dataset):
         self.img_dir = os.path.join(data_dir, 'JPEGImages')
         self.ann_dir = os.path.join(data_dir, 'Annotations')
 
-        if split == "train":
+        if split == "trainval":
             self.tf_composition = transforms.Compose([
+                transforms.Resize((self.size, self.size)),
+                transforms.RandomResizedCrop(size, scale=(0.80, 1.0)),
+                transforms.ColorJitter(brightness=(0.8,1.2)),
+                transforms.RandomRotation(5),
                 transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
                 transforms.RandomHorizontalFlip(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ])
         else:
             self.tf_composition = transforms.Compose([
+                transforms.Resize((self.size, self.size)),
                 transforms.ToTensor(),
                 transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
             ])
@@ -105,14 +110,7 @@ class VOCDataset(Dataset):
         # TODO Q1.2: insert your code here. hint: read image, find the labels and weight.
         lab_vec = self.anno_list[index][0]
         wgt_vec = self.anno_list[index][1]
-        img = Image.open(fpath).resize((self.size, self.size))
-
-#        img = img * 2 / 255 - 1
-
-#        img -= np.array([123.68, 116.78, 103.94]) # subtract mean
-#        img = img * 2 / 255
-
-#        img = torch.tensor(img).permute((2, 0, 1))
+        img = Image.open(fpath)
 
         image = self.tf_composition(img)
         label = torch.FloatTensor(lab_vec)

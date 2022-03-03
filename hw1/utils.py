@@ -132,7 +132,7 @@ def eval_dataset_map(model, device, test_loader):
             # TODO Q1.3: insert your code here
             gt.append(target)
             valid.append(wgt)
-            pred.append(model.forward(data))
+            pred.append(model.forward(data.to(device)))
     gt = torch.cat(gt).cpu().numpy()
     valid = torch.cat(valid).cpu().numpy()
     pred = torch.cat(pred).cpu().numpy()
