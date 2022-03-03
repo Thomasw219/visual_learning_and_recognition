@@ -25,7 +25,8 @@ class VOCDataset(Dataset):
         INV_CLASS[CLASS_NAMES[i]] = i
 
     # TODO Q1.2: Adjust data_dir according to where **you** stored the data
-    def __init__(self, split, size, data_dir='data/VOCdevkit/VOC2007/'):
+    def __init__(self, split, size, data_dir='data/VOCdevkit/VOC2007/', return_idx=False):
+        self.return_idx = return_idx
         super().__init__()
         self.split = split
         self.data_dir = data_dir
@@ -115,4 +116,14 @@ class VOCDataset(Dataset):
         image = self.tf_composition(img)
         label = torch.FloatTensor(lab_vec)
         wgt = torch.FloatTensor(wgt_vec)
-        return image, label, wgt
+        if self.return_idx:
+            return image, label, wgt, torch.tensor([index], dtype=torch.long)
+        else:
+            return image, label, wgt
+
+    def get_image(self, index):
+        findex = self.index_list[index]
+        fpath = os.path.join(self.img_dir, findex + '.jpg')
+        img = Image.open(fpath)
+        return np.array(img)
+
