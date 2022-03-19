@@ -144,7 +144,9 @@ def main():
     # also use an LR scheduler to decay LR by 10 every 30 epochs
     # you can also use PlateauLR scheduler, which usually works well
 
-
+    criterion = nn.BCELoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -168,8 +170,10 @@ def main():
     #TODO: Create Datasets and Dataloaders using VOCDataset - Ensure that the sizes are as required
     # Also ensure that data directories are correct - the ones use for testing by TAs might be different
     # Resize the images to 512x512
+    train_dataset = VOCDataset('trainval', image_size=512)
+    val_dataset = VOCDataset('test', image_size=512)
 
-
+    torch.manual_seed(0)
 
     train_sampler = None
     train_loader = torch.utils.data.DataLoader(
@@ -197,11 +201,10 @@ def main():
     
     
     # TODO: Create loggers for wandb - ideally, use flags since wandb makes it harder to debug code.
-
+    if USE_WANDB:
+        wandb.init()
 
     for epoch in range(args.start_epoch, args.epochs):
-        adjust_learning_rate(optimizer, epoch)
-
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch)
 
@@ -241,12 +244,15 @@ def train(train_loader, model, criterion, optimizer, epoch):
         data_time.update(time.time() - end)
 
         # TODO: Get inputs from the data dict
-
+        images = data['image']
+        labels = data['label']
+        wgts = data['wgt']
 
         # TODO: Get output from model
         # TODO: Perform any necessary functions on the output such as clamping
         # TODO: Compute loss using ``criterion``
-        
+        output = nn.functional.sigmoid(model.forward(images))
+        loss = nn.functional.binary_cross_entropy(torch.amax(output, dim=(2, 3)), labels.cuda(), weight=wgts.cuda())
 
 
         # measure metrics and record loss
@@ -259,6 +265,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         # TODO:
         # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
 
         # measure elapsed time

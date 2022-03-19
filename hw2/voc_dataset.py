@@ -30,7 +30,7 @@ class VOCDataset(Dataset):
 
     
     #TODO: Ensure data directories are correct
-    def __init__(self, split='trainval', image_size=224, top_n=300, data_dir='data/VOCdevkit/VOC2007/'):
+    def __init__(self, split='trainval', image_size=224, top_n=10, data_dir='data/VOCdevkit/VOC2007/'):
         super().__init__()
         self.split      = split     # 'trainval' or 'test'
         self.data_dir   = data_dir
@@ -42,6 +42,20 @@ class VOCDataset(Dataset):
         self.img_dir = os.path.join(data_dir, 'JPEGImages')
         self.ann_dir = os.path.join(data_dir, 'Annotations')
         self.selective_search_dir = os.path.join("data/VOCdevkit/VOC2007/", 'selective_search_data')
+
+        if split == "trainval":
+            self.tf_composition = transforms.Compose([
+                transforms.Resize((self.size, self.size)),
+                transforms.ColorJitter(brightness=(0.8,1.2)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
+        else:
+            self.tf_composition = transforms.Compose([
+                transforms.Resize((self.size, self.size)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            ])
 
         self.roi_data = scipy.io.loadmat(self.selective_search_dir + '/voc_2007_'+ split + '.mat')
 
@@ -138,9 +152,7 @@ class VOCDataset(Dataset):
         img = Image.open(fpath)
         width, height = img.size
 
-        img = transforms.ToTensor()(img)
-        img = transforms.Resize((self.size, self.size))(img)
-        img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(img)
+        image = self.tf_composition(img)
 
         lab_vec = self.anno_list[index][0]
         wgt_vec = self.anno_list[index][1]
@@ -159,15 +171,20 @@ class VOCDataset(Dataset):
         Make sure to return only the top_n proposals!
         '''
 
-
+        rois = self.roi_data['boxes'][0][index][:self.top_n].astype(float)
+        rois[:, 0] = rois[:, 0] / height
+        rois[:, 1] = rois[:, 1] / width
+        rois[:, 2] = rois[:, 2] / height
+        rois[:, 3] = rois[:, 3] / width
+        proposals = rois
 
         ret = {}
 
-        ret['image']    = img
+        ret['image']    = image
         ret['label']    = label
         ret['wgt']      = wgt
-        ret['rois']     = proposals
-        ret['gt_boxes'] = gt_boxes
-        ret['gt_classes'] = gt_class_list
+#        ret['rois']     = proposals
+#        ret['gt_boxes'] = gt_boxes
+#        ret['gt_classes'] = gt_class_list
 
         return ret
