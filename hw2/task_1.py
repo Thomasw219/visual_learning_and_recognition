@@ -25,7 +25,7 @@ from voc_dataset import *
 from utils import *
 
 import wandb
-USE_WANDB = False # use flags, wandb is not convenient for debugging
+USE_WANDB = True # use flags, wandb is not convenient for debugging
 
 
 model_names = sorted(name for name in models.__dict__
@@ -122,6 +122,10 @@ parser.add_argument('--vis', action='store_true')
 
 best_prec1 = 0
 
+def rescale(hm):
+    hm -= torch.min(hm)
+    hm /= torch.max(hm)
+    return hm
 
 def main():
     global args, best_prec1
@@ -146,7 +150,7 @@ def main():
 
     criterion = nn.BCELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=1, threshold=1e-3)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -210,7 +214,8 @@ def main():
 
         # evaluate on validation set
         if epoch % args.eval_freq == 0 or epoch == args.epochs - 1:
-            m1, m2 = validate(val_loader, model, criterion, epoch)
+            with torch.no_grad():
+                m1, m2 = validate(val_loader, model, criterion, epoch)
 
             score = m1 * m2
             # remember best prec@1 and save checkpoint
@@ -224,6 +229,25 @@ def main():
                 'optimizer': optimizer.state_dict(),
             }, is_best)
 
+            scheduler.step(m1)
+
+    if USE_WANDB:
+        rand_indices = [10, 20, 30]
+        for i in range(3):
+            data = val_dataset.__getitem__(rand_indices[i])
+            images = data['image']
+            labels = data['label']
+            wgts = data['wgt']
+            imoutput = torch.sigmoid(model.forward(images.unsqueeze(0)))
+
+            im = wandb.Image(tensor_to_PIL(images))
+            tgt = torch.argmax(labels)
+            hm = wandb.Image(transforms.ToPILImage(mode='L')(transforms.Resize((512, 512))(rescale(imoutput[0, tgt:tgt+1]))))
+
+            wandb.log({
+                "done/im" : im,
+                "done/hm" : hm,
+                })
 
 
 
@@ -251,14 +275,15 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # TODO: Get output from model
         # TODO: Perform any necessary functions on the output such as clamping
         # TODO: Compute loss using ``criterion``
-        output = nn.functional.sigmoid(model.forward(images))
-        loss = nn.functional.binary_cross_entropy(torch.amax(output, dim=(2, 3)), labels.cuda(), weight=wgts.cuda())
+        imoutput = torch.sigmoid(model.forward(images))
+        output = torch.amax(imoutput, dim=(2, 3))
+        loss = nn.functional.binary_cross_entropy(output, labels.cuda(), weight=wgts.cuda())
 
 
         # measure metrics and record loss
-        m1 = metric1(imoutput.data, target)
-        m2 = metric2(imoutput.data, target)
-        losses.update(loss.item(), input.size(0))
+        m1 = metric1(output, labels, wgts)
+        m2 = metric2(output, labels, wgts)
+        losses.update(loss.item(), images.size(0))
         avg_m1.update(m1)
         avg_m2.update(m2)
 
@@ -290,13 +315,32 @@ def train(train_loader, model, criterion, optimizer, epoch):
                       avg_m1=avg_m1,
                       avg_m2=avg_m2))
 
-        #TODO: Visualize/log things as mentioned in handout
-        #TODO: Visualize at appropriate intervals
+    #TODO: Visualize/log things as mentioned in handout
+    #TODO: Visualize at appropriate intervals
+
+    if USE_WANDB:
+        i1 = epoch % args.batch_size
+        i2 = (epoch + args.batch_size // 2) % args.batch_size
+        im1 = wandb.Image(tensor_to_PIL(images[i1]))
+        im2 = wandb.Image(tensor_to_PIL(images[i2]))
+        tgt1 = torch.argmax(labels[i1])
+        tgt2 = torch.argmax(labels[i2])
+        hm1 = wandb.Image(transforms.ToPILImage(mode='L')(transforms.Resize((512, 512))(rescale(imoutput[i1, tgt1:tgt1+1]))))
+        hm2 = wandb.Image(transforms.ToPILImage(mode='L')(transforms.Resize((512, 512))(rescale(imoutput[i2, tgt2:tgt2+1]))))
+
+        wandb.log({
+            "train/loss" : losses.avg,
+            "train/metric1" : avg_m1.avg,
+            "train/metric2" : avg_m2.avg,
+            "epoch" : epoch,
+            "train/im1" : im1,
+            "train/im2" : im2,
+            "train/hm1" : hm1,
+            "train/hm2" : hm2,
+            })
 
 
-
-
-        # End of train()
+    # End of train()
 
 
 def validate(val_loader, model, criterion, epoch = 0):
@@ -312,19 +356,21 @@ def validate(val_loader, model, criterion, epoch = 0):
     for i, (data) in enumerate(val_loader):
 
         # TODO: Get inputs from the data dict
-        
-
+        images = data['image']
+        labels = data['label']
+        wgts = data['wgt']
 
         # TODO: Get output from model
         # TODO: Perform any necessary functions on the output
         # TODO: Compute loss using ``criterion``
-        
-
+        imoutput = torch.sigmoid(model.forward(images))
+        output = torch.amax(imoutput, dim=(2, 3))
+        loss = nn.functional.binary_cross_entropy(output, labels.cuda(), weight=wgts.cuda())
 
         # measure metrics and record loss
-        m1 = metric1(imoutput.data, target)
-        m2 = metric2(imoutput.data, target)
-        losses.update(loss.item(), input.size(0))
+        m1 = metric1(output, labels, wgts)
+        m2 = metric2(output, labels, wgts)
+        losses.update(loss.item(), images.size(0))
         avg_m1.update(m1)
         avg_m2.update(m2)
 
@@ -345,8 +391,29 @@ def validate(val_loader, model, criterion, epoch = 0):
                       avg_m1=avg_m1,
                       avg_m2=avg_m2))
 
-        #TODO: Visualize things as mentioned in handout
-        #TODO: Visualize at appropriate intervals
+    #TODO: Visualize things as mentioned in handout
+    #TODO: Visualize at appropriate intervals
+
+    if USE_WANDB:
+        i1 = epoch % args.batch_size
+        i2 = (epoch + args.batch_size // 2) % args.batch_size
+        im1 = wandb.Image(tensor_to_PIL(images[i1]))
+        im2 = wandb.Image(tensor_to_PIL(images[i2]))
+        tgt1 = torch.argmax(labels[i1])
+        tgt2 = torch.argmax(labels[i2])
+        hm1 = wandb.Image(transforms.ToPILImage(mode='L')(transforms.Resize((512, 512))(rescale(imoutput[i1, tgt1:tgt1+1]))))
+        hm2 = wandb.Image(transforms.ToPILImage(mode='L')(transforms.Resize((512, 512))(rescale(imoutput[i2, tgt2:tgt2+1]))))
+
+        wandb.log({
+            "test/loss" : losses.avg,
+            "test/metric1" : avg_m1.avg,
+            "test/metric2" : avg_m2.avg,
+            "epoch" : epoch,
+            "test/im1" : im1,
+            "test/im2" : im2,
+            "test/hm1" : hm1,
+            "test/hm2" : hm2,
+            })
 
 
     print(' * Metric1 {avg_m1.avg:.3f} Metric2 {avg_m2.avg:.3f}'.format(
@@ -381,16 +448,31 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def metric1(output, target):
-    # TODO: Ignore for now - proceed till instructed
-    
-    return [0]
-
-
-def metric2(output, target):
+def metric1(output, target, weights):
     #TODO: Ignore for now - proceed till instructed
-    
-    return [0]
+    AP = []
+    valid = weights.cpu().detach().numpy()
+    output = output.cpu().detach().numpy()
+    target = target.cpu().detach().numpy()
+    for cid in range(20):
+        gt_cls = target[:, cid][valid[:, cid] > 0].astype('float32')
+        if np.sum(gt_cls) == 0:
+            continue
+        pred_cls = output[:, cid][valid[:, cid] > 0].astype('float32')
+        ap = sklearn.metrics.average_precision_score(gt_cls, pred_cls)
+        AP.append(ap)
+    return np.mean(AP)
+
+THRESHOLD = 0.5
+def metric2(output, target, weights):
+    #TODO: Ignore for now - proceed till instructed
+    valid = weights.cpu().detach().numpy().flatten()
+    output = output.cpu().detach().numpy().flatten()
+    target = target.cpu().detach().numpy().flatten()
+
+    gt = target[valid > 0].astype('float32')
+    pred = output[valid > 0].astype('float32')
+    return sklearn.metrics.recall_score(gt, pred > THRESHOLD, average='binary')
 
 
 if __name__ == '__main__':

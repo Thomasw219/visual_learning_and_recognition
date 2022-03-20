@@ -66,7 +66,8 @@ def localizer_alexnet(pretrained=False, **kwargs):
     model = LocalizerAlexNet(**kwargs)
     #TODO: Initialize weights correctly based on whethet it is pretrained or not
     if pretrained:
-        alexnet = torch.hub.load('pytorch/vision:v0.10.0', 'alexnet', pretrained=True)
+        print("Loading Pretrained Weights")
+        alexnet = models.alexnet(pretrained=True)
         for i in range(12):
             model.features[i] = alexnet.features[i]
 
