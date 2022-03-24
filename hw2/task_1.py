@@ -277,7 +277,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
         # TODO: Compute loss using ``criterion``
         imoutput = torch.sigmoid(model.forward(images))
         output = torch.amax(imoutput, dim=(2, 3))
-        loss = nn.functional.binary_cross_entropy(output, labels.cuda(), weight=wgts.cuda())
+#        loss = nn.functional.binary_cross_entropy(output, labels.cuda(), weight=wgts.cuda())
+        loss = nn.functional.binary_cross_entropy(output, labels.cuda())
 
 
         # measure metrics and record loss
@@ -365,7 +366,8 @@ def validate(val_loader, model, criterion, epoch = 0):
         # TODO: Compute loss using ``criterion``
         imoutput = torch.sigmoid(model.forward(images))
         output = torch.amax(imoutput, dim=(2, 3))
-        loss = nn.functional.binary_cross_entropy(output, labels.cuda(), weight=wgts.cuda())
+#        loss = nn.functional.binary_cross_entropy(output, labels.cuda(), weight=wgts.cuda())
+        loss = nn.functional.binary_cross_entropy(output, labels.cuda())
 
         # measure metrics and record loss
         m1 = metric1(output, labels, wgts)
@@ -455,10 +457,12 @@ def metric1(output, target, weights):
     output = output.cpu().detach().numpy()
     target = target.cpu().detach().numpy()
     for cid in range(20):
-        gt_cls = target[:, cid][valid[:, cid] > 0].astype('float32')
+#        gt_cls = target[:, cid][valid[:, cid] > 0].astype('float32')
+        gt_cls = target[:, cid].astype('float32')
         if np.sum(gt_cls) == 0:
             continue
-        pred_cls = output[:, cid][valid[:, cid] > 0].astype('float32')
+#        pred_cls = output[:, cid][valid[:, cid] > 0].astype('float32')
+        pred_cls = output[:, cid].astype('float32')
         ap = sklearn.metrics.average_precision_score(gt_cls, pred_cls)
         AP.append(ap)
     return np.mean(AP)
@@ -470,8 +474,10 @@ def metric2(output, target, weights):
     output = output.cpu().detach().numpy().flatten()
     target = target.cpu().detach().numpy().flatten()
 
-    gt = target[valid > 0].astype('float32')
-    pred = output[valid > 0].astype('float32')
+#    gt = target[valid > 0].astype('float32')
+#    pred = output[valid > 0].astype('float32')
+    gt = target.astype('float32')
+    pred = output.astype('float32')
     return sklearn.metrics.recall_score(gt, pred > THRESHOLD, average='binary')
 
 
