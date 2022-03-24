@@ -78,30 +78,20 @@ class WSDDN(nn.Module):
 
         #TODO: Use image and rois as input
         # compute cls_prob which are N_roi X 20 scores
-        print(image.shape)
         feats = self.features(image)
-        print(feats.shape)
         boxes = torch.cat([torch.zeros(rois.shape[0], 1).cuda(), rois * 15], dim=-1)
         pooled_feats = roi_pool(feats, boxes=boxes, output_size=self.roi_pool_output_shape)
-        print(pooled_feats.shape)
         flattened_feats = self.classifier(pooled_feats.view(pooled_feats.shape[0], -1))
-        print(flattened_feats.shape)
 
         classification_scores = self.score_fc(flattened_feats)
         detection_scores = self.bbox_fc(flattened_feats)
-        print(classification_scores.shape)
-        print(detection_scores.shape)
 
         
-        cls_prob = torch.sum(classification_scores * detection_scores, axis=0)
-        print(cls_prob.shape)
-
-        exit()
+        cls_prob = classification_scores * detection_scores
 
         if self.training:
-            label_vec = gt_vec.view(self.n_classes, -1)
+            label_vec = gt_vec.view(self.n_classes)
             self.cross_entropy = self.build_loss(cls_prob, label_vec)
-
         
         return cls_prob
 
@@ -118,4 +108,4 @@ class WSDDN(nn.Module):
         #output of forward()
         #Checkout forward() to see how it is called
 
-        return loss
+        return F.binary_cross_entropy(torch.sum(cls_prob, axis=0), label_vec)

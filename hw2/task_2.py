@@ -161,10 +161,10 @@ for iter, data in enumerate(train_loader):
     #TODO: perform forward pass - take care that proposal values should be in pixels for the fwd pass
     # also convert inputs to cuda if training on GPU
     image = image.cuda()
-    gt_class_list = torch.LongTensor(gt_class_list).cuda()
     rois = rois[0].to(torch.float32).cuda()
+    target = target.cuda()
 
-    net.forward(image, rois=rois, gt_vec=gt_class_list)
+    net.forward(image, rois=rois, gt_vec=target)
 
     # backward pass and update
     loss = net.loss()    

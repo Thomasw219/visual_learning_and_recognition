@@ -22,6 +22,7 @@ def nms(bounding_boxes, confidence_score, threshold=0.05):
     return: list of bounding boxes and scores
     """
 
+    
 
     return boxes, scores
 
