@@ -27,12 +27,38 @@ class WSDDN(nn.Module):
             print(classes)
 
         #TODO: Define the WSDDN model
-        self.features   = None
-        self.roi_pool   = None
-        self.classifier = None
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=(11, 11), stride=(4, 4), padding=(2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), dilation=(1, 1)),
+            nn.Conv2d(64, 192, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2)),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2), dilation=(1, 1)),
+            nn.Conv2d(192, 384, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(384, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(),
+        )
+        self.roi_pool   = roi_pool
+        self.roi_pool_output_shape = (15, 15)
+        self.p = 0.5
+        self.classifier = nn.Sequential(
+                nn.Linear(15 * 15 * 256, 4096), 
+                nn.ReLU(), 
+                nn.Dropout(self.p),
+                nn.Linear(4096, 4096), 
+                nn.ReLU(), 
+                nn.Dropout(self.p))
 
-        self.score_fc   = None
-        self.bbox_fc    = None
+
+        self.score_fc   = nn.Sequential(
+                nn.Linear(4096, 20),
+                nn.Softmax(dim=1))
+        self.bbox_fc    = nn.Sequential(
+                nn.Linear(4096, 20),
+                nn.Softmax(dim=0))
 
         
         # loss
@@ -52,14 +78,30 @@ class WSDDN(nn.Module):
 
         #TODO: Use image and rois as input
         # compute cls_prob which are N_roi X 20 scores
-        
-        
-        cls_prob = None
+        print(image.shape)
+        feats = self.features(image)
+        print(feats.shape)
+        boxes = torch.cat([torch.zeros(rois.shape[0], 1).cuda(), rois * 15], dim=-1)
+        pooled_feats = roi_pool(feats, boxes=boxes, output_size=self.roi_pool_output_shape)
+        print(pooled_feats.shape)
+        flattened_feats = self.classifier(pooled_feats.view(pooled_feats.shape[0], -1))
+        print(flattened_feats.shape)
 
+        classification_scores = self.score_fc(flattened_feats)
+        detection_scores = self.bbox_fc(flattened_feats)
+        print(classification_scores.shape)
+        print(detection_scores.shape)
+
+        
+        cls_prob = torch.sum(classification_scores * detection_scores, axis=0)
+        print(cls_prob.shape)
+
+        exit()
 
         if self.training:
             label_vec = gt_vec.view(self.n_classes, -1)
             self.cross_entropy = self.build_loss(cls_prob, label_vec)
+
         
         return cls_prob
 

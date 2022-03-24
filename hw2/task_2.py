@@ -33,11 +33,12 @@ weight_decay = 0.0005
 
 if rand_seed is not None:
     np.random.seed(rand_seed)
+    torch.manual_seed(rand_seed)
 
 # load datasets and create dataloaders
 
-train_dataset = None
-val_dataset = None
+train_dataset = VOCDataset('trainval', image_size=512)
+val_dataset = VOCDataset('test', image_size=512)
 
 train_loader = torch.utils.data.DataLoader(
     train_dataset,
@@ -73,6 +74,7 @@ own_state = net.state_dict()
 for name, param in pret_net.items():
     print(name)
     if name not in own_state:
+        print('Did not find {}'.format(name))
         continue
     if isinstance(param, Parameter):
         param = param.data
@@ -83,7 +85,6 @@ for name, param in pret_net.items():
         print('Did not find {}'.format(name))
         continue
 
-
 # Move model to GPU and set train mode
 net.load_state_dict(own_state)
 net.cuda()
@@ -92,9 +93,11 @@ net.train()
 # TODO: Create optimizer for network parameters from conv2 onwards
 # (do not optimize conv1)
 
-
-
-
+opt_params = []
+for name, param in net.named_parameters():
+    if 'features.0' not in name:
+        opt_params.append(param)
+optimizer = torch.optim.SGD(opt_params, lr=lr, momentum=momentum, weight_decay=weight_decay)
 
 output_dir = "./"
 if not os.path.exists(output_dir):
@@ -131,6 +134,7 @@ def test_net(model, val_loader=None, thresh=0.05):
 
         # TODO: Iterate over each class (follow comments)
         for class_num in range(20):            
+            pass
             # get valid rois and cls_scores based on thresh
             
             # use NMS to get boxes and scores
@@ -156,13 +160,14 @@ for iter, data in enumerate(train_loader):
 
     #TODO: perform forward pass - take care that proposal values should be in pixels for the fwd pass
     # also convert inputs to cuda if training on GPU
+    image = image.cuda()
+    gt_class_list = torch.LongTensor(gt_class_list).cuda()
+    rois = rois[0].to(torch.float32).cuda()
 
-
-
-    
+    net.forward(image, rois=rois, gt_vec=gt_class_list)
 
     # backward pass and update
-    loss = net.loss    
+    loss = net.loss()    
     train_loss += loss.item()
     step_cnt += 1
 

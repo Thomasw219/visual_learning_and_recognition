@@ -30,7 +30,7 @@ class VOCDataset(Dataset):
 
     
     #TODO: Ensure data directories are correct
-    def __init__(self, split='trainval', image_size=224, top_n=10, data_dir='data/VOCdevkit/VOC2007/'):
+    def __init__(self, split='trainval', image_size=224, top_n=300, data_dir='data/VOCdevkit/VOC2007/'):
         super().__init__()
         self.split      = split     # 'trainval' or 'test'
         self.data_dir   = data_dir
@@ -183,8 +183,8 @@ class VOCDataset(Dataset):
         ret['image']    = image
         ret['label']    = label
         ret['wgt']      = wgt
-#        ret['rois']     = proposals
-#        ret['gt_boxes'] = gt_boxes
-#        ret['gt_classes'] = gt_class_list
+        ret['rois']     = proposals
+        ret['gt_boxes'] = gt_boxes
+        ret['gt_classes'] = gt_class_list
 
         return ret

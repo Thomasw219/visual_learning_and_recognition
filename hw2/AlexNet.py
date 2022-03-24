@@ -67,7 +67,7 @@ class LocalizerAlexNetRobust(nn.Module):
             nn.Conv2d(256, 256, kernel_size=(1, 1), stride=(1, 1)),
             nn.ReLU(),
             nn.Conv2d(256, 20, kernel_size=(1, 1), stride=(1, 1)),
-            nn.AvgPool2d(3, stride=1, padding=1)
+            nn.AvgPool2d(5, stride=1, padding=2)
         )
 
 
