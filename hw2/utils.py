@@ -22,9 +22,23 @@ def nms(bounding_boxes, confidence_score, threshold=0.05):
     return: list of bounding boxes and scores
     """
 
-    
+    bounding_boxes = bounding_boxes[confidence_score > threshold]
+    scores = confidence_score[confidence_score > threshold]
+    N = bounding_boxes.shape[0]
 
-    return boxes, scores
+    diffs = bounding_boxes[:,2].reshape(N, 1) - bounding_boxes[:,0].reshape(1, N)
+    i_width = torch.minimum(diffs, torch.transpose(diffs, 0, 1))
+    diffs = bounding_boxes[:,3].reshape(N, 1) - bounding_boxes[:,1].reshape(1, N)
+    i_height = torch.minimum(diffs, torch.transpose(diffs, 0, 1))
+    i_area = torch.maximum(i_width * i_height, torch.zeros_like(i_width))
+
+    boxes_area = (bounding_boxes[:, 2] - bounding_boxes[:, 0]) * (bounding_boxes[:, 3] - bounding_boxes[:, 1])
+    u_area = boxes_area.reshape(N, 1) + boxes_area.reshape(1, N) - i_area
+    iou = i_area / u_area - torch.eye(N, device=bounding_boxes.device)
+    non_maximal = torch.any(torch.logical_and(iou > 0.3, scores.reshape(N, 1) > scores.reshape(1, N)), dim=0)
+    maximal = torch.logical_not(non_maximal)
+
+    return bounding_boxes[maximal], scores[maximal]
 
 
 #TODO: calculate the intersection over union of two boxes

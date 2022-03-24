@@ -119,6 +119,10 @@ def test_net(model, val_loader=None, thresh=0.05):
     thresh is the confidence threshold
     """
 
+    correct = []
+    confidence = []
+
+
     for iter, data in enumerate(val_loader):
 
         # one batch = data for one image
@@ -130,19 +134,24 @@ def test_net(model, val_loader=None, thresh=0.05):
         gt_class_list   = data['gt_classes']
 
         #TODO: perform forward pass, compute cls_probs
+        image = image.cuda()
+        rois = rois[0].to(torch.float32).cuda()
+        target = target.cuda()
 
+        cls_probs = model.forward(image, rois=rois)
 
         # TODO: Iterate over each class (follow comments)
         for class_num in range(20):            
-            pass
             # get valid rois and cls_scores based on thresh
+            confidence_score = cls_probs[:, class_num]
             
             # use NMS to get boxes and scores
-            
+            boxes, scores = nms(rois, confidence_score)
 
-        #TODO: visualize bounding box predictions when required
-        #TODO: Calculate mAP on test set
 
+    #TODO: visualize bounding box predictions when required
+    #TODO: Calculate mAP on test set
+        
 
 
 
@@ -167,7 +176,7 @@ for iter, data in enumerate(train_loader):
     net.forward(image, rois=rois, gt_vec=target)
 
     # backward pass and update
-    loss = net.loss()    
+    loss = net.loss    
     train_loss += loss.item()
     step_cnt += 1
 
@@ -177,7 +186,7 @@ for iter, data in enumerate(train_loader):
 
     #TODO: evaluate the model every N iterations (N defined in handout)
     
-    if iter%val_interval == 0 and iter != 0:
+    if iter%val_interval == 0:
         net.eval()
         ap = test_net(net, val_loader)
         print("AP ", ap)
