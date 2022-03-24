@@ -108,4 +108,4 @@ class WSDDN(nn.Module):
         #output of forward()
         #Checkout forward() to see how it is called
 
-        return F.binary_cross_entropy(torch.sum(cls_prob, axis=0), label_vec)
+        return F.binary_cross_entropy(torch.sum(cls_prob, axis=0), label_vec, reduction='sum')

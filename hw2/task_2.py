@@ -31,7 +31,7 @@ momentum = 0.9
 weight_decay = 0.0005
 # ------------
 
-USE_WANDB = True
+USE_WANDB = False
 
 if rand_seed is not None:
     np.random.seed(rand_seed)
@@ -128,10 +128,12 @@ def test_net(model, val_loader=None, thresh=0.05):
 
     correct = [[] for i in range(20)]
     confidence = [[] for i in range(20)]
+    total = [0 for i in range(20)]
 
     
 
     for iter, data in enumerate(val_loader):
+        print(iter)
 
         # one batch = data for one image
         image           = data['image']
@@ -151,6 +153,9 @@ def test_net(model, val_loader=None, thresh=0.05):
         all_boxes = []
         all_labels = []
         all_scores = []
+
+        for label in gt_class_list:
+            total[label] += 1
 
         # TODO: Iterate over each class (follow comments)
         for class_num in range(20):            
@@ -179,7 +184,8 @@ def test_net(model, val_loader=None, thresh=0.05):
         all_labels = np.concatenate(all_labels).astype(int)
         all_scores = np.concatenate(all_scores)
 
-        if USE_WANDB:
+        #TODO: visualize bounding box predictions when required
+        if USE_WANDB and all_boxes.shape[0] > 0:
             pil_image = tensor_to_PIL(image[0].cpu())
             predictions_image = wandb.Image(pil_image, boxes={
                 "predictions" : {
@@ -194,14 +200,36 @@ def test_net(model, val_loader=None, thresh=0.05):
                     },
                 })
             wandb.log({'gt_boxes' : gt_image, 'pred_boxes' : predictions_image})
-            exit()
-        
 
-    #TODO: visualize bounding box predictions when required
     #TODO: Calculate mAP on test set
-        
+    APs = []
+    for class_num in range(20):
+        class_correct = correct[class_num]
+        class_scores = confidence[class_num]
 
+        class_total = total[class_num]
 
+        indices = np.argsort(-1 * np.array(class_scores))
+        class_correct = class_correct[indices]
+        class_scores = class_scores[indices]
+        print(class_total)
+        print(class_scores)
+        print(class_correct)
+        precisions = []
+        recalls = []
+        tp = 0
+        fp = 0
+        for i in range(len(class_correct)):
+            if class_correct[i]:
+                tp += 1
+            else:
+                fp += 1
+            precisions.append(tp / (tp + fp))
+            recall.append(tp / class_total)
+        print(precisions)
+        print(recalls)
+
+    exit()
 
 for iter, data in enumerate(train_loader):
 
@@ -236,7 +264,8 @@ for iter, data in enumerate(train_loader):
     
     if iter%val_interval == 0:
         net.eval()
-        ap = test_net(net, val_loader)
+        with torch.no_grad():
+            ap = test_net(net, val_loader)
         print("AP ", ap)
         net.train()
 
