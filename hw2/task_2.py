@@ -14,7 +14,7 @@ import pickle as pkl
 from wsddn import WSDDN
 from voc_dataset import *
 import wandb
-from utils import nms, tensor_to_PIL
+from utils import nms, tensor_to_PIL, get_box_data, get_box_data_scores, iou
 from PIL import Image, ImageDraw
 
 
@@ -31,14 +31,21 @@ momentum = 0.9
 weight_decay = 0.0005
 # ------------
 
+USE_WANDB = True
+
 if rand_seed is not None:
     np.random.seed(rand_seed)
     torch.manual_seed(rand_seed)
+
+if USE_WANDB:
+    wandb.init(project="vlr2q2")
 
 # load datasets and create dataloaders
 
 train_dataset = VOCDataset('trainval', image_size=512)
 val_dataset = VOCDataset('test', image_size=512)
+
+CLASS_ID_TO_LABEL = dict(enumerate(val_dataset.CLASS_NAMES))
 
 train_loader = torch.utils.data.DataLoader(
     train_dataset,
@@ -119,9 +126,10 @@ def test_net(model, val_loader=None, thresh=0.05):
     thresh is the confidence threshold
     """
 
-    correct = []
-    confidence = []
+    correct = [[] for i in range(20)]
+    confidence = [[] for i in range(20)]
 
+    
 
     for iter, data in enumerate(val_loader):
 
@@ -130,8 +138,8 @@ def test_net(model, val_loader=None, thresh=0.05):
         target          = data['label']
         wgt             = data['wgt']
         rois            = data['rois']
-        gt_boxes        = data['gt_boxes']
-        gt_class_list   = data['gt_classes']
+        gt_boxes        = torch.tensor(data['gt_boxes']).numpy()
+        gt_class_list   = torch.tensor(data['gt_classes']).numpy()
 
         #TODO: perform forward pass, compute cls_probs
         image = image.cuda()
@@ -140,14 +148,54 @@ def test_net(model, val_loader=None, thresh=0.05):
 
         cls_probs = model.forward(image, rois=rois)
 
+        all_boxes = []
+        all_labels = []
+        all_scores = []
+
         # TODO: Iterate over each class (follow comments)
         for class_num in range(20):            
             # get valid rois and cls_scores based on thresh
             confidence_score = cls_probs[:, class_num]
             
             # use NMS to get boxes and scores
-            boxes, scores = nms(rois, confidence_score)
+            boxes, scores = nms(rois, confidence_score, threshold=0)
+            all_boxes.append(boxes.detach().cpu().numpy())
+            all_labels.append([class_num for i in range(boxes.shape[0])])
+            all_scores.append(scores.detach().cpu().numpy())
 
+            for i in range(boxes.shape[0]):
+                box = boxes[i]
+                score = scores[i]
+                confidence[class_num].append(score)
+                box_correct = False
+                if class_num in gt_class_list:
+                    for j in range(gt_class_list.shape[0]):
+                        if gt_class_list[j] == class_num and iou(gt_boxes[j], box.detach().cpu().numpy()) > 0.5:
+                            box_correct = True
+
+                correct[class_num].append(box_correct)
+
+        all_boxes = np.concatenate(all_boxes)
+        all_labels = np.concatenate(all_labels).astype(int)
+        all_scores = np.concatenate(all_scores)
+
+        if USE_WANDB:
+            pil_image = tensor_to_PIL(image[0].cpu())
+            predictions_image = wandb.Image(pil_image, boxes={
+                "predictions" : {
+                    "box_data" : get_box_data_scores(all_labels, all_boxes, all_scores),
+                    "class_labels" : CLASS_ID_TO_LABEL,
+                    },
+                })
+            gt_image = wandb.Image(pil_image, boxes={
+                "predictions" : {
+                    "box_data" : get_box_data(gt_class_list, gt_boxes),
+                    "class_labels" : CLASS_ID_TO_LABEL,
+                    },
+                })
+            wandb.log({'gt_boxes' : gt_image, 'pred_boxes' : predictions_image})
+            exit()
+        
 
     #TODO: visualize bounding box predictions when required
     #TODO: Calculate mAP on test set

@@ -48,7 +48,14 @@ def iou(box1, box2):
     returns IoU vallue
     """
 
-    return iou
+    i_w = np.minimum(box1[2] - box2[0], box2[2] - box1[0])
+    i_h = np.minimum(box1[3] - box2[1], box2[3] - box1[1])
+    i_a = np.maximum(i_w * i_h, 0)
+    a1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    a2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    u_a = a1 + a2 - i_a
+
+    return i_a / u_a
 
 
 def tensor_to_PIL(image):
@@ -82,12 +89,30 @@ def get_box_data(classes, bbox_coordinates):
                 "maxX": bbox_coordinates[i][2],
                 "maxY": bbox_coordinates[i][3],
             },
-            "class_id" : classes[i],
+            "class_id" : int(classes[i]),
         } for i in range(len(classes))
         ]
 
     return box_list
 
+def get_box_data_scores(classes, bbox_coordinates, scores):
+    """
+    classes : tensor containing class predictions/gt
+    bbox_coordinates: tensor containing [[xmin0, ymin0, xmax0, ymax0], [xmin1, ymin1, ...]] (Nx4)
 
+    return list of boxes as expected by the wandb bbox plotter
+    """
+    box_list = [{
+            "position": {
+                "minX": float(bbox_coordinates[i][0]),
+                "minY": float(bbox_coordinates[i][1]),
+                "maxX": float(bbox_coordinates[i][2]),
+                "maxY": float(bbox_coordinates[i][3]),
+            },
+            "class_id" : int(classes[i]),
+            "scores" : {"confidence" : float(scores[i])}
+        } for i in range(len(classes))
+        ]
 
+    return box_list
 
