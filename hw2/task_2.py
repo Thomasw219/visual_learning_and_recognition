@@ -31,7 +31,7 @@ momentum = 0.9
 weight_decay = 0.0005
 # ------------
 
-USE_WANDB = False
+USE_WANDB = True
 
 if rand_seed is not None:
     np.random.seed(rand_seed)
@@ -110,15 +110,31 @@ output_dir = "./"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
 # training
-train_loss = 0
+train_loss = AverageMeter()
 tp, tf, fg, bg = 0., 0., 0, 0
 step_cnt = 0
 re_cnt = False
 disp_interval = 10
 val_interval = 1000
-
-
 
 def test_net(model, val_loader=None, thresh=0.05):
     """
@@ -133,10 +149,6 @@ def test_net(model, val_loader=None, thresh=0.05):
     
 
     for iter, data in enumerate(val_loader):
-        print(iter)
-        if iter == 100:
-            break
-
         # one batch = data for one image
         image           = data['image']
         target          = data['label']
@@ -165,7 +177,7 @@ def test_net(model, val_loader=None, thresh=0.05):
             confidence_score = cls_probs[:, class_num]
             
             # use NMS to get boxes and scores
-            boxes, scores = nms(rois, confidence_score, threshold=0)
+            boxes, scores = nms(rois, confidence_score)
             all_boxes.append(boxes.detach().cpu().numpy())
             all_labels.append([class_num for i in range(boxes.shape[0])])
             all_scores.append(scores.detach().cpu().numpy())
@@ -187,21 +199,7 @@ def test_net(model, val_loader=None, thresh=0.05):
         all_scores = np.concatenate(all_scores)
 
         #TODO: visualize bounding box predictions when required
-        if USE_WANDB and all_boxes.shape[0] > 0:
-            pil_image = tensor_to_PIL(image[0].cpu())
-            predictions_image = wandb.Image(pil_image, boxes={
-                "predictions" : {
-                    "box_data" : get_box_data_scores(all_labels, all_boxes, all_scores),
-                    "class_labels" : CLASS_ID_TO_LABEL,
-                    },
-                })
-            gt_image = wandb.Image(pil_image, boxes={
-                "predictions" : {
-                    "box_data" : get_box_data(gt_class_list, gt_boxes),
-                    "class_labels" : CLASS_ID_TO_LABEL,
-                    },
-                })
-            wandb.log({'gt_boxes' : gt_image, 'pred_boxes' : predictions_image})
+
 
     #TODO: Calculate mAP on test set
     APs = []
@@ -234,48 +232,103 @@ def test_net(model, val_loader=None, thresh=0.05):
                 AP += (r2 - r1) * precisions[i]
                 r1 = r2
         APs.append(AP)
-    print(APs)
+    return APs
 
-    exit()
+for epoch in range(5):
+    for iter, data in enumerate(train_loader):
 
-for iter, data in enumerate(train_loader):
+        #TODO: get one batch and perform forward pass
+        # one batch = data for one image
+        image           = data['image']
+        target          = data['label']
+        wgt             = data['wgt']
+        rois            = data['rois']
+        gt_boxes        = data['gt_boxes']
+        gt_class_list   = data['gt_classes']
+        
 
-    #TODO: get one batch and perform forward pass
-    # one batch = data for one image
-    image           = data['image']
-    target          = data['label']
-    wgt             = data['wgt']
-    rois            = data['rois']
-    gt_boxes        = data['gt_boxes']
-    gt_class_list   = data['gt_classes']
-    
+        #TODO: perform forward pass - take care that proposal values should be in pixels for the fwd pass
+        # also convert inputs to cuda if training on GPU
+        image = image.cuda()
+        rois = rois[0].to(torch.float32).cuda()
+        target = target.cuda()
 
-    #TODO: perform forward pass - take care that proposal values should be in pixels for the fwd pass
-    # also convert inputs to cuda if training on GPU
-    image = image.cuda()
-    rois = rois[0].to(torch.float32).cuda()
-    target = target.cuda()
+        net.forward(image, rois=rois, gt_vec=target)
 
-    net.forward(image, rois=rois, gt_vec=target)
+        # backward pass and update
+        loss = net.loss    
+        train_loss.update(loss.item())
+        step_cnt += 1
 
-    # backward pass and update
-    loss = net.loss    
-    train_loss += loss.item()
-    step_cnt += 1
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    #TODO: evaluate the model every N iterations (N defined in handout)
-    
-    if iter%val_interval == 0:
-        net.eval()
-        with torch.no_grad():
-            ap = test_net(net, val_loader)
-        print("AP ", ap)
-        net.train()
+        #TODO: evaluate the model every N iterations (N defined in handout)
+        
+        if iter%val_interval == 0:
+            net.eval()
+            with torch.no_grad():
+                ap = test_net(net, val_loader)
+            print("AP ", ap)
+            mAP = np.mean(ap)
+            print("mAP ", mAP)
+            print("train_loss ", train_loss.avg)
+            if USE_WANDB:
+                ap_dict = {"test/" + train_dataset.CLASS_NAMES[i] + "_ap" : ap[i] for i in range(20)}
+                wandb.log({**ap_dict, "test/mAP" : mAP, "train/loss" : train_loss.avg})
+            net.train()
 
 
-    #TODO: Perform all visualizations here
-    #The intervals for different things are defined in the handout
+        #TODO: Perform all visualizations here
+        #The intervals for different things are defined in the handout
+        if USE_WANDB and iter >= len(train_loader) - 11:
+            net.eval()
+            image           = data['image']
+            target          = data['label']
+            wgt             = data['wgt']
+            rois            = data['rois']
+            gt_boxes        = torch.tensor(data['gt_boxes']).numpy()
+            gt_class_list   = torch.tensor(data['gt_classes']).numpy()
+
+            #TODO: perform forward pass, compute cls_probs
+            image = image.cuda()
+            rois = rois[0].to(torch.float32).cuda()
+            target = target.cuda()
+
+            cls_probs = net.forward(image, rois=rois)
+
+            all_boxes = []
+            all_labels = []
+            all_scores = []
+
+            # TODO: Iterate over each class (follow comments)
+            for class_num in range(20):            
+                # get valid rois and cls_scores based on thresh
+                confidence_score = cls_probs[:, class_num]
+                
+                # use NMS to get boxes and scores
+                boxes, scores = nms(rois, confidence_score)
+                all_boxes.append(boxes.detach().cpu().numpy())
+                all_labels.append([class_num for i in range(boxes.shape[0])])
+                all_scores.append(scores.detach().cpu().numpy())
+
+            all_boxes = np.concatenate(all_boxes)
+            all_labels = np.concatenate(all_labels).astype(int)
+            all_scores = np.concatenate(all_scores)
+            pil_image = tensor_to_PIL(image[0].cpu())
+            predictions_image = wandb.Image(pil_image, boxes={
+                "predictions" : {
+                    "box_data" : get_box_data_scores(all_labels, all_boxes, all_scores),
+                    "class_labels" : CLASS_ID_TO_LABEL,
+                    },
+                })
+            gt_image = wandb.Image(pil_image, boxes={
+                "predictions" : {
+                "box_data" : get_box_data(gt_class_list, gt_boxes),
+                "class_labels" : CLASS_ID_TO_LABEL,
+                },
+            })
+            wandb.log({'gt_boxes' : gt_image, 'pred_boxes' : predictions_image})
+            net.train()
+
