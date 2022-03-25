@@ -47,10 +47,8 @@ class WSDDN(nn.Module):
         self.classifier = nn.Sequential(
                 nn.Linear(15 * 15 * 256, 4096), 
                 nn.ReLU(), 
-                nn.Dropout(self.p),
                 nn.Linear(4096, 4096), 
-                nn.ReLU(), 
-                nn.Dropout(self.p))
+                nn.ReLU())
 
 
         self.score_fc   = nn.Sequential(
@@ -79,8 +77,8 @@ class WSDDN(nn.Module):
         #TODO: Use image and rois as input
         # compute cls_prob which are N_roi X 20 scores
         feats = self.features(image)
-        boxes = torch.cat([torch.zeros(rois.shape[0], 1).cuda(), rois * 15], dim=-1)
-        pooled_feats = roi_pool(feats, boxes=boxes, output_size=self.roi_pool_output_shape)
+        boxes = torch.cat([torch.zeros(rois.shape[0], 1).cuda(), rois * 512], dim=-1)
+        pooled_feats = roi_pool(feats, boxes=boxes, output_size=self.roi_pool_output_shape, spatial_scale=31/512)
         flattened_feats = self.classifier(pooled_feats.view(pooled_feats.shape[0], -1))
 
         classification_scores = self.score_fc(flattened_feats)

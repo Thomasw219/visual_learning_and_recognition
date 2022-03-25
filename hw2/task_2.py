@@ -134,8 +134,9 @@ tp, tf, fg, bg = 0., 0., 0, 0
 step_cnt = 0
 re_cnt = False
 disp_interval = 10
-val_interval = 1000
+#val_interval = 1000
 #val_interval = 50
+val_interval = 2000
 
 def test_net(model, val_loader=None, thresh=0.05):
     """
@@ -280,8 +281,12 @@ for epoch in range(5):
             print("train_loss ", train_loss.avg)
             if USE_WANDB:
                 ap_dict = {"test/" + train_dataset.CLASS_NAMES[i] + "_ap" : ap[i] for i in range(20)}
-                wandb.log({**ap_dict, "test/mAP" : mAP, "train/loss" : train_loss.avg})
+                wandb.log({**ap_dict, "test/mAP" : mAP})
             net.train()
+
+        if iter%500 == 0:
+            wandb.log({"train/loss" : train_loss.avg})
+            train_loss.reset()
 
 
         #TODO: Perform all visualizations here
