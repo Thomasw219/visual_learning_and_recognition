@@ -26,7 +26,7 @@ lr_decay_steps = {150000}
 lr_decay = 1. / 10
 rand_seed = 1024
 
-lr = 0.0001
+lr = 0.00005
 momentum = 0.9
 weight_decay = 0.0005
 # ------------
@@ -105,6 +105,7 @@ for name, param in net.named_parameters():
     if 'features.0' not in name:
         opt_params.append(param)
 optimizer = torch.optim.SGD(opt_params, lr=lr, momentum=momentum, weight_decay=weight_decay)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=1, threshold=1e-3)
 
 output_dir = "./"
 if not os.path.exists(output_dir):
@@ -238,7 +239,7 @@ def test_net(model, val_loader=None, thresh=0.05):
         APs.append(AP)
     return APs
 
-for epoch in range(5):
+for epoch in range(6):
     for iter, data in enumerate(train_loader):
         print(iter)
 
@@ -277,6 +278,7 @@ for epoch in range(5):
                 ap = test_net(net, val_loader)
             print("AP ", ap)
             mAP = np.mean(ap)
+            scheduler.step(mAP)
             print("mAP ", mAP)
             print("train_loss ", train_loss.avg)
             if USE_WANDB:

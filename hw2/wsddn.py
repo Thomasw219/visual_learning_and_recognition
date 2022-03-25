@@ -43,11 +43,13 @@ class WSDDN(nn.Module):
         )
         self.roi_pool   = roi_pool
         self.roi_pool_output_shape = (15, 15)
-        self.p = 0.5
+        self.p = 0.3
         self.classifier = nn.Sequential(
                 nn.Linear(15 * 15 * 256, 4096), 
+                nn.Dropout(self.p), 
                 nn.ReLU(), 
                 nn.Linear(4096, 4096), 
+                nn.Dropout(self.p), 
                 nn.ReLU())
 
 
