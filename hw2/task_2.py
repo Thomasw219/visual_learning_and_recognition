@@ -134,6 +134,8 @@ def test_net(model, val_loader=None, thresh=0.05):
 
     for iter, data in enumerate(val_loader):
         print(iter)
+        if iter == 100:
+            break
 
         # one batch = data for one image
         image           = data['image']
@@ -204,17 +206,14 @@ def test_net(model, val_loader=None, thresh=0.05):
     #TODO: Calculate mAP on test set
     APs = []
     for class_num in range(20):
-        class_correct = correct[class_num]
-        class_scores = confidence[class_num]
+        class_correct = np.array(correct[class_num])
+        class_scores = np.array(confidence[class_num])
 
         class_total = total[class_num]
 
         indices = np.argsort(-1 * np.array(class_scores))
         class_correct = class_correct[indices]
         class_scores = class_scores[indices]
-        print(class_total)
-        print(class_scores)
-        print(class_correct)
         precisions = []
         recalls = []
         tp = 0
@@ -225,9 +224,17 @@ def test_net(model, val_loader=None, thresh=0.05):
             else:
                 fp += 1
             precisions.append(tp / (tp + fp))
-            recall.append(tp / class_total)
-        print(precisions)
-        print(recalls)
+            recalls.append(tp / class_total)
+
+        AP = 0
+        r1 = 0
+        for i in range(1, len(precisions)):
+            r2 = recalls[i]
+            if r1 < r2:
+                AP += (r2 - r1) * precisions[i]
+                r1 = r2
+        APs.append(AP)
+    print(APs)
 
     exit()
 
