@@ -135,6 +135,7 @@ step_cnt = 0
 re_cnt = False
 disp_interval = 10
 val_interval = 1000
+#val_interval = 50
 
 def test_net(model, val_loader=None, thresh=0.05):
     """
@@ -149,6 +150,8 @@ def test_net(model, val_loader=None, thresh=0.05):
     
 
     for iter, data in enumerate(val_loader):
+#        if iter == 100:
+#            break
         # one batch = data for one image
         image           = data['image']
         target          = data['label']
@@ -236,6 +239,7 @@ def test_net(model, val_loader=None, thresh=0.05):
 
 for epoch in range(5):
     for iter, data in enumerate(train_loader):
+        print(iter)
 
         #TODO: get one batch and perform forward pass
         # one batch = data for one image
